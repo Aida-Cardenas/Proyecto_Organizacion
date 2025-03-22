@@ -289,26 +289,6 @@ normalizar_fraccion:
     move $t0, $s3
     li $t1, 0
 
-    # normalizar numeros decimales de un decimal 
-    beqz $s5, ajustar_decimal_menor_uno
-    
-    # otros casos
-    j buscar_bit_frac
-    
-ajustar_decimal_menor_uno:
-    # valores menores a uno
-    li $t9, 50            
-    beq $s3, $t9, caso_cero_coma_cinco
-    
-    li $t9, 25            
-    beq $s3, $t9, caso_cero_coma_veinticinco
-    
-    li $t9, 75            
-    beq $s3, $t9, caso_cero_coma_setentaycinco
-    
-    # otros valores
-    j buscar_bit_frac
-
 buscar_bit_frac:
     beqz $t0, es_cero
     srl $t2, $t0, 31
@@ -320,8 +300,6 @@ buscar_bit_frac:
 bit_frac_encontrado:
     li $t3, 127
     sub $s4, $t3, $t1     # exponente = 127 - desplazamiento
-
-    # Construir mantisa para número fraccionario
     sllv $t0, $s3, $t1
     sll $t0, $t0, 1       # eliminar bit implícito
     srl $t0, $t0, 9
