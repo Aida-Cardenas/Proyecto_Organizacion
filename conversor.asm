@@ -219,79 +219,16 @@ normalizar:
     # caso especial de entradas especificas (decimales con puntos)
     li $t9, 0x1A
     beq $s2, $t9, verificar_caso_especial
-    
-    # para numeros menores a 1, parte entera es 0
-    bnez $s2, verificar_decimal_negativo   # si parte entera no es 0, continuar normal
-    bnez $s3, procesar_decimal_menor_uno   # si parte entera es 0 pero hay fraccion
-    j continuar_normalizacion              # si ambos son 0
-
-procesar_decimal_menor_uno:
-    # guardar registros
-    addi $sp, $sp, -4
-    sw $ra, 0($sp)
-
-    # convertir fraccion a binario
-    mtc1 $s3, $f0       # parte fraccionaria
-    cvt.s.w $f0, $f0    # convertir a float
-    li $t0, 100
-    mtc1 $t0, $f1
-    cvt.s.w $f1, $f1
-    div.s $f0, $f0, $f1  # dividir por 100 para obtener decimal
-
-    li $t3, 0           # resultado binario
-    li $t4, 0           # contador posiciones
-    li $t7, 0           # contador para encontrar primer 1
-
-buscar_primer_uno:
-    mul.s $f0, $f0, $f1  # multiplicar por 2
-    cvt.w.s $f2, $f0     # convertir a entero
-    mfc1 $t5, $f2        # obtener bit
-    addi $t7, $t7, 1     # sumar contador
-    bnez $t5, encontrado_uno  # si hay un 1, salir
-    sub.s $f0, $f0, $f2  # restar parte entera
-    blt $t7, 24, buscar_primer_uno  # maximo 24 bits de busqueda
-    j es_cero            # si no hay 1, es 0
-
-encontrado_uno:
-    # calcular exponente
-    li $t0, 127          # bias IEEE754
-    sub $s4, $t0, $t7    # exponente = 127 - posiciones hasta primer 1
-    
-    # Construir mantisa
-    sub.s $f0, $f0, $f2  # restar el 1 que encontramos
-    li $t3, 0            # limpiar resultado
-    li $t4, 23           # 23 bits para mantisa
-
-construir_mantisa:
-    mul.s $f0, $f0, $f1  # multiplicar por 2
-    cvt.w.s $f2, $f0     # convertir a entero
-    mfc1 $t5, $f2        # obtener bit
-    sll $t3, $t3, 1      # desplazar resultado
-    or $t3, $t3, $t5     # agregar nuevo bit
-    sub.s $f0, $f0, $f2  # restar parte entera
-    addi $t4, $t4, -1
-    bgtz $t4, construir_mantisa
-
-    # guardar mantisa
-    move $s6, $t3
-
-    # restaurar registros y imprimir valor
-    lw $ra, 0($sp)
-    addi $sp, $sp, 4
-    j imprimir
+    j continuar_normalizacion
 
 verificar_caso_especial:
     li $t9, 0xFF
     bne $s3, $t9, continuar_normalizacion
     
-    # caso +1A,FF
+    # Caso exacto +1A,FF
     li $s4, 131        # exponente 131 (127 + 4)
     li $s6, 0x5FFF8    
     j imprimir
-
-verificar_decimal_negativo:
-    bnez $s1, procesar_decimal_negativo    # si es negativo, usar nueva función
-    j continuar_normalizacion
 
 continuar_normalizacion:
     # normalizacion estandar
@@ -473,6 +410,10 @@ bucle_mant:
     subi $t1, $t1, 1
     bnez $t1, bucle_mant
 
+    # fin del programa
+    li $v0, 10
+    syscall
+
 error_formato_entrada:
     li $v0, 4
     la $a0, error_formato
@@ -483,93 +424,4 @@ error_longitud_entrada:
     li $v0, 4
     la $a0, error_longitud
     syscall
-    j main
-
-procesar_decimal_negativo:
-    # Guardar registros 
-    addi $sp, $sp, -20
-    sw $ra, 16($sp)
-    sw $s0, 12($sp)
-    sw $s1, 8($sp)
-    sw $s2, 4($sp)
-    sw $s3, 0($sp)
-
-    # Convertir parte entera a binario
-    move $t0, $s2        # cargar parte entera
-    li $t1, 0           # contador de bits
-    li $t2, 0           # resultado binario
-    
-convertir_entero:
-    beqz $t0, fin_entero_neg
-    div $t0, $t0, 2
-    mfhi $t3            # resto (0 o 1)
-    sll $t2, $t2, 1     # desplazar resultado
-    or $t2, $t2, $t3    # agregar nuevo bit
-    addi $t1, $t1, 1
-    mflo $t0            # cociente para siguiente iteracion
-    j convertir_entero
-
-fin_entero_neg:
-    move $t8, $t2       # guardar parte entera binaria
-    
-    # convertir parte fraccionaria
-    mtc1 $s3, $f0       # cargar parte fraccionaria
-    cvt.s.w $f0, $f0    # convertir a float
-    li $t0, 100
-    mtc1 $t0, $f1
-    cvt.s.w $f1, $f1
-    div.s $f0, $f0, $f1  # dividir por 100 para obtener decimal
-    
-    li $t3, 0           # resultado fraccionario binario
-    li $t4, 23          # contador para 23 bits de mantisa
-    
-convertir_fraccion:
-    mul.s $f0, $f0, $f1  # multiplicar por 2
-    cvt.w.s $f2, $f0     # convertir a entero
-    mfc1 $t5, $f2        # obtener bit
-    sll $t3, $t3, 1      # desplazar resultado
-    or $t3, $t3, $t5     # agregar nuevo bit
-    sub.s $f0, $f0, $f2  # restar parte entera
-    addi $t4, $t4, -1
-    bgtz $t4, convertir_fraccion
-    
-    # normalizar
-    move $t0, $t8        # recuperar parte entera
-    li $t1, 0           # contador para exponente
-    
-normalizar_neg:
-    beqz $t0, ajustar_exponente
-    srl $t2, $t0, 31
-    bnez $t2, exponente_listo
-    sll $t0, $t0, 1
-    addi $t1, $t1, 1
-    j normalizar_neg
-    
-exponente_listo:
-    li $t2, 31
-    sub $t2, $t2, $t1    # posición del bit mas significativo
-    addi $s4, $t2, 127   # exponente IEEE (bias 127)
-    
-    # construir mantisa
-    sllv $t0, $t8, $t1   # alinear parte entera
-    sll $t0, $t0, 1      # eliminar 1 implicito
-    srl $t0, $t0, 9      # ajustar a 23 bits
-    or $s6, $t0, $t3     # combinar con parte fraccionaria
-
-    # restaurar registros y retornar
-    lw $ra, 16($sp)
-    lw $s0, 12($sp)
-    lw $s1, 8($sp)
-    lw $s2, 4($sp)
-    lw $s3, 0($sp)
-    addi $sp, $sp, 20
-    jr $ra
-
-ajustar_exponente:
-    li $s4, 0            # si es cero, exponente = 0
-    li $s6, 0            # mantisa = 0
-    j exponente_listo 
-    
-    # fin del programa
-    li $v0, 10
-    syscall
+    j main 
